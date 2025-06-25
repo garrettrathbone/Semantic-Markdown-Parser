@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "semantic-markdown-parser"
+name = "semantic_markdown_parser"
 version = "1.0.0"
 description = "A Python project that parses Markdown files into a tree structure, then processes them into semantically meaningful text chunks."
 authors = ["Talha J Siam <talha@askturing.ai>"]
