@@ -1,5 +1,5 @@
 from llama_index.core.node_parser import SentenceSplitter
-from token_encoder.encode import get_token_length, get_tokens
+from .token_encoder.encode import get_token_length, get_tokens
 
 
 def split_text_into_sentences(text, parent_text="", chunk_size=500):

@@ -2,9 +2,12 @@ import re
 from dataclasses import dataclass
 from typing import Optional, List
 from llama_index.core.node_parser import MarkdownNodeParser
-from token_encoder.encode import get_token_length
+from .token_encoder.encode import get_token_length
 from llama_index.core.schema import TextNode, MetadataMode
-from text_splitter import split_text_into_sentences
+from .text_splitter import split_text_into_sentences
+
+from dataclasses import dataclass, field
+from typing import List, Optional, Set
 
 
 @dataclass
@@ -23,6 +26,7 @@ class TreeElement:
     content: str
     token_length: int
     children: List["TreeElement"]
+    pages: Set[int] = field(default_factory=set)
 
 
 @dataclass
@@ -40,6 +44,7 @@ class SemanticChunk:
     content: str
     token_length: int
     headers: List[str]
+    pages: Set[int] = field(default_factory=set)
 
 
 class SemanticMarkdownParser:
@@ -47,7 +52,9 @@ class SemanticMarkdownParser:
     A parser that converts markdown text into semantic chunks based on its structure.
     """
 
-    def parse_markdown_to_tree(self, markdown_text: str) -> TreeElement:
+    def parse_markdown_to_tree(
+        self, markdown_text: str, page_break: str = "\n---\n"
+    ) -> TreeElement:
         """
         Parses markdown text into a tree structure.
 
@@ -66,6 +73,7 @@ class SemanticMarkdownParser:
         parser = MarkdownNodeParser.from_defaults()
         base_node = TextNode(text=markdown_text, id_="doc1", metadata={})
         parsed_nodes = parser.get_nodes_from_node(base_node)
+        pages = markdown_text.split(page_break)
 
         if not parsed_nodes:
             raise ValueError("No content found in markdown text")
@@ -75,8 +83,22 @@ class SemanticMarkdownParser:
         for node in parsed_nodes:
             node_text = node.get_content(metadata_mode=MetadataMode.NONE)
             lines = node_text.split("\n")
+            if "---" in lines:
+                lines.remove("---")
             heading_line = lines[0].strip() if lines else ""
             header_match = re.match(r"^(#+)\s+(.*)$", heading_line)
+
+            page_index = next(
+                (
+                    i
+                    for i, chunk in enumerate(pages)
+                    if node_text.splitlines()[0] in chunk
+                ),
+                -1,
+            )
+            page_count = set(
+                range(page_index, page_index + node_text.count(page_break) + 1)
+            )
 
             if header_match:
                 header_text = header_match.group(2).strip()
@@ -113,6 +135,7 @@ class SemanticMarkdownParser:
                 content=content,
                 children=[],
                 token_length=token_length,
+                pages=page_count,
             )
             current_element.children.append(new_child)
 
@@ -209,6 +232,7 @@ class SemanticMarkdownParser:
             content=combined_content,
             token_length=combined_length,
             headers=chunk1.headers[:common_prefix_length],  # Keep only common headers
+            pages=chunk1.pages.union(chunk2.pages),
         )
 
     def process_tree_to_chunks(
@@ -252,6 +276,7 @@ class SemanticMarkdownParser:
                             content=content,
                             token_length=get_token_length(content),
                             headers=current_headers.copy(),
+                            pages=root.pages,
                         )
                     )
             else:
@@ -260,6 +285,7 @@ class SemanticMarkdownParser:
                         content=root.content,
                         token_length=root.token_length,
                         headers=current_headers.copy(),
+                        pages=root.pages,
                     )
                 )
 
